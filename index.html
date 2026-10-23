@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mine opgaver</title>
+<style>
+  :root {
+    --bg: #f3f6f9;
+    --surface: #ffffff;
+    --ink: #14202b;
+    --muted: #5c6b79;
+    --line: #d8e0e7;
+    --accent: #0b6e8a;
+    --accent-ink: #ffffff;
+    --late: #b3261e;
+    --done: #8a98a5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f171e;
+      --surface: #17222b;
+      --ink: #e6edf3;
+      --muted: #94a3b1;
+      --line: #263540;
+      --accent: #4fb7d4;
+      --accent-ink: #08222b;
+      --late: #ff8a80;
+      --done: #6b7b88;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    padding: 24px 16px 64px;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
+  }
+  h1 { font-size: 1.9rem; margin: 0; letter-spacing: -0.01em; }
+  .status { color: var(--muted); font-size: 0.9rem; }
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--accent);
+    background: var(--accent); color: var(--accent-ink);
+    padding: 8px 16px; border-radius: 6px;
+  }
+  button.ghost { background: transparent; color: var(--accent); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .bar { display: flex; gap: 12px; align-items: center; }
+  section.list {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; padding: 16px 20px; margin-bottom: 16px;
+  }
+  section.list h2 { font-size: 1.1rem; margin: 0 0 8px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+  li:first-child { border-top: 0; }
+  li.sub { margin-left: 28px; }
+  .box {
+    flex: none; width: 18px; height: 18px; margin-top: 4px;
+    border: 2px solid var(--muted); border-radius: 4px;
+  }
+  li.done .box { background: var(--done); border-color: var(--done); }
+  li.done .title { color: var(--done); text-decoration: line-through; }
+  .title { font-weight: 500; }
+  .meta { font-size: 0.85rem; color: var(--muted); }
+  .meta.late { color: var(--late); }
+  .empty, .notice {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; padding: 20px;
+  }
+  .notice h2 { margin-top: 0; font-size: 1.1rem; }
+  .error { color: var(--late); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mine opgaver</h1>
+    <div class="bar">
+      <span class="status" id="status"></span>
+      <button class="ghost" id="refresh" hidden>Opdater</button>
+    </div>
+  </header>
+
+  <div id="setup" class="notice" hidden>
+    <h2>Klient-id mangler</h2>
+    <p>Åbn filen i en teksteditor og indsæt dit Google OAuth klient-id i <code>CLIENT_ID</code> øverst i scriptet.</p>
+  </div>
+
+  <div id="login" class="notice" hidden>
+    <h2>Log ind for at se dine opgaver</h2>
+    <p>Siden henter dine lister fra Google Tasks. Den kan kun læse, ikke ændre.</p>
+    <button id="signin">Log ind med Google</button>
+  </div>
+
+  <div id="error" class="notice error" hidden></div>
+  <div id="content"></div>
+</main>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+  // Indsæt dit klient-id fra Google Cloud Console her:
+  const CLIENT_ID = "INDSÆT_KLIENT_ID_HER";
+
+  const SCOPE = "https://www.googleapis.com/auth/tasks.readonly";
+  const API = "https://tasks.googleapis.com/tasks/v1";
+  const TOKEN_KEY = "gt_token";
+
+  const $ = (id) => document.getElementById(id);
+  const dateFmt = new Intl.DateTimeFormat("da-DK", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+  let tokenClient = null;
+  let loading = false;
+
+  function setStatus(text) { $("status").textContent = text; }
+
+  function showError(msg) {
+    const el = $("error");
+    el.textContent = msg;
+    el.hidden = false;
+  }
+
+  function getStoredToken() {
+    try {
+      const raw = sessionStorage.getItem(TOKEN_KEY);
+      if (!raw) return null;
+      const t = JSON.parse(raw);
+      return t.expires > Date.now() + 30000 ? t.value : null;
+    } catch { return null; }
+  }
+
+  function storeToken(value, expiresIn) {
+    try {
+      sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ value, expires: Date.now() + expiresIn * 1000 }));
+    } catch {}
+  }
+
+  function showLogin() {
+    $("login").hidden = false;
+    $("refresh").hidden = true;
+    setStatus("");
+  }
+
+  async function api(path, token) {
+    const res = await fetch(API + path, { headers: { Authorization: "Bearer " + token } });
+    if (res.status === 401) {
+      sessionStorage.removeItem(TOKEN_KEY);
+      throw new Error("AUTH");
+    }
+    if (!res.ok) throw new Error("Google svarede med fejl " + res.status);
+    return res.json();
+  }
+
+  async function fetchAll(path, token) {
+    let items = [], pageToken = "";
+    do {
+      const sep = path.includes("?") ? "&" : "?";
+      const data = await api(path + (pageToken ? sep + "pageToken=" + encodeURIComponent(pageToken) : ""), token);
+      items = items.concat(data.items || []);
+      pageToken = data.nextPageToken || "";
+    } while (pageToken);
+    return items;
+  }
+
+  async function load(token) {
+    if (loading) return;
+    loading = true;
+    $("error").hidden = true;
+    $("login").hidden = true;
+    setStatus("Henter …");
+    try {
+      const lists = await fetchAll("/users/@me/lists?maxResults=100", token);
+      const withTasks = await Promise.all(lists.map(async (l) => ({
+        list: l,
+        tasks: await fetchAll("/lists/" + encodeURIComponent(l.id) + "/tasks?maxResults=100&showCompleted=true&showHidden=false", token)
+      })));
+      render(withTasks);
+      $("refresh").hidden = false;
+      setStatus("Opdateret " + new Date().toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" }));
+    } catch (e) {
+      if (e.message === "AUTH") { showLogin(); }
+      else { showError(e.message || "Kunne ikke hente opgaver."); setStatus(""); $("refresh").hidden = false; }
+    } finally {
+      loading = false;
+    }
+  }
+
+  function render(data) {
+    const root = $("content");
+    root.textContent = "";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let any = false;
+
+    for (const { list, tasks } of data) {
+      if (!tasks.length) continue;
+      any = true;
+      const sec = document.createElement("section");
+      sec.className = "list";
+      const h = document.createElement("h2");
+      h.textContent = list.title;
+      sec.appendChild(h);
+      const ul = document.createElement("ul");
+
+      // Sortér efter Googles egen rækkefølge, forældre før børn
+      const sorted = tasks.slice().sort((a, b) => (a.position || "").localeCompare(b.position || ""));
+      const top = sorted.filter((t) => !t.parent);
+      const children = (id) => sorted.filter((t) => t.parent === id);
+      const add = (t, sub) => {
+        const li = document.createElement("li");
+        li.className = (sub ? "sub " : "") + (t.status === "completed" ? "done" : "");
+        const box = document.createElement("span"); box.className = "box";
+        const body = document.createElement("div");
+        const title = document.createElement("div"); title.className = "title";
+        title.textContent = t.title || "(uden titel)";
+        body.appendChild(title);
+        if (t.due) {
+          const d = new Date(t.due);
+          const dueLocal = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+          const m = document.createElement("div");
+          m.className = "meta" + (t.status !== "completed" && dueLocal < today ? " late" : "");
+          m.textContent = dateFmt.format(d);
+          body.appendChild(m);
+        }
+        if (t.notes) {
+          const n = document.createElement("div"); n.className = "meta";
+          n.textContent = t.notes;
+          body.appendChild(n);
+        }
+        li.append(box, body);
+        ul.appendChild(li);
+      };
+      for (const t of top) { add(t, false); children(t.id).forEach((c) => add(c, true)); }
+      sec.appendChild(ul);
+      root.appendChild(sec);
+    }
+
+    if (!any) {
+      const e = document.createElement("div");
+      e.className = "empty";
+      e.textContent = "Ingen opgaver at vise. Tilføj en i Google Tasks, og tryk Opdater.";
+      root.appendChild(e);
+    }
+  }
+
+  function requestToken(prompt) {
+    if (!tokenClient) return;
+    tokenClient.requestAccessToken({ prompt });
+  }
+
+  function init() {
+    if (CLIENT_ID.startsWith("INDSÆT")) { $("setup").hidden = false; return; }
+    if (!window.google || !google.accounts) { setTimeout(init, 100); return; }
+
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPE,
+      callback: (resp) => {
+        if (resp.error) { showLogin(); return; }
+        storeToken(resp.access_token, Number(resp.expires_in) || 3600);
+        load(resp.access_token);
+      },
+      error_callback: () => showLogin()
+    });
+
+    $("signin").addEventListener("click", () => requestToken("select_account"));
+    $("refresh").addEventListener("click", refresh);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+
+    refresh();
+  }
+
+  function refresh() {
+    const t = getStoredToken();
+    if (t) load(t);
+    else requestToken(""); // stille fornyelse; ved afvisning vises login-knappen
+  }
+
+  window.addEventListener("load", init);
+</script>
+</body>
+</html>
