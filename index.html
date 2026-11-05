@@ -16,6 +16,13 @@
     --navy: #1d4e89;
     --c0: #0e7490; --c1: #1d4e89; --c2: #0f766e;
     --c3: #3b82c4; --c4: #155e75; --c5: #2a9d8f;
+    --f0: #9fe9fa; --f1: #a9ccfb; --f2: #9ff0dc;
+    --f3: #bcdcff; --f4: #8fdcec; --f5: #b2f5e6;
+    --chip-ink: #06222f;
+    --edge1: #bcd3dd; --edge2: #a6c2cf;
+    --glow: rgba(14, 116, 144, 0.28);
+    --hi: rgba(255, 255, 255, 0.85);
+    --inset: rgba(13, 34, 48, 0.18);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -29,6 +36,10 @@
       --navy: #6aa7ee;
       --c0: #4cc3d9; --c1: #6aa7ee; --c2: #3fc4b4;
       --c3: #7fb6ee; --c4: #56b4cc; --c5: #5fd0c0;
+      --edge1: #0a1a22; --edge2: #06121a;
+      --glow: rgba(76, 195, 217, 0.18);
+      --hi: rgba(255, 255, 255, 0.07);
+      --inset: rgba(0, 0, 0, 0.55);
     }
   }
   * { box-sizing: border-box; }
@@ -43,7 +54,7 @@
     display: flex; align-items: center; justify-content: space-between;
     gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
   }
-  h1 { font-size: 1.8rem; margin: 0; letter-spacing: -0.01em; color: var(--ink); }
+  h1 { font-size: 1.8rem; margin: 0; letter-spacing: -0.01em; }
   h2 { font-size: 1rem; margin: 0; letter-spacing: 0.02em; }
   .bar { display: flex; gap: 12px; align-items: center; }
   .status { color: var(--muted); font-size: 0.875rem; }
@@ -54,7 +65,7 @@
   }
   button:disabled { opacity: 0.6; cursor: default; }
   button.ghost { background: transparent; color: var(--accent); }
-  button:focus-visible, input:focus-visible, select:focus-visible {
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
     outline: 3px solid var(--accent); outline-offset: 2px;
   }
   .card {
@@ -70,55 +81,83 @@
   .error { color: var(--navy); border-color: var(--navy); }
   [hidden] { display: none !important; }
 
-  /* Tidslinje */
-  .tl-scroll { overflow-x: auto; padding-bottom: 8px; }
+  /* Tidslinje: hævet plade med en nedsænket skinne */
+  .card.raised {
+    border-radius: 12px; padding: 20px 22px; margin-bottom: 32px;
+    background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 86%, var(--accent)));
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    box-shadow:
+      inset 0 1px 0 var(--hi),
+      0 3px 0 var(--edge1),
+      0 6px 0 var(--edge2),
+      0 18px 32px var(--glow);
+  }
+  .tl-scroll {
+    overflow-x: auto; padding: 14px 8px 6px; border-radius: 8px;
+    background: color-mix(in srgb, var(--bg) 75%, var(--surface));
+    box-shadow: inset 0 3px 8px var(--inset), inset 0 -1px 0 var(--hi);
+  }
   .tl-track { display: grid; min-width: min-content; }
   .day { display: flex; flex-direction: column; min-width: 0; padding: 0 3px; }
-  .day.weekend { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .day.weekend { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   .stack {
     flex: 1; display: flex; flex-direction: column; justify-content: flex-end;
-    gap: 4px; padding-bottom: 8px; min-height: 24px;
+    gap: 6px; padding-bottom: 10px; min-height: 28px;
   }
   .chip {
-    --lc: var(--c0);
-    font-size: 0.78rem; line-height: 1.25; padding: 4px 6px;
-    border-radius: 4px; border-left: 3px solid var(--lc);
-    background: color-mix(in srgb, var(--lc) 14%, var(--surface));
-    overflow: hidden; display: -webkit-box;
-    -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-    word-break: break-word;
+    --lc: var(--c0); --lf: var(--f0);
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    font: inherit; font-size: 0.78rem; line-height: 1.25; font-weight: 600;
+    padding: 5px 7px; border-radius: 6px; color: var(--chip-ink);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--lf) 70%, white), var(--lf));
+    border: 1px solid color-mix(in srgb, var(--lc) 55%, white);
+    border-left: 4px solid var(--lc);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.7),
+      0 2px 0 color-mix(in srgb, var(--lc) 70%, black),
+      0 5px 12px color-mix(in srgb, var(--lc) 45%, transparent);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
   }
-  .chip.overdue { border: 1px dashed var(--lc); border-left: 3px solid var(--lc); }
+  .chip:hover { transform: translateY(-2px); }
+  .chip:active { transform: translateY(1px); }
+  .chip .ct {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; word-break: break-word;
+  }
+  .chip.overdue { border-style: dashed; border-left-style: solid; }
   .compact .chip {
-    width: 10px; height: 10px; padding: 0; border: 0; border-radius: 50%;
-    background: var(--lc); align-self: center; font-size: 0;
+    width: 13px; height: 13px; padding: 0; border-radius: 50%; align-self: center;
+    border: 2px solid var(--lc); background: var(--lf);
   }
-  .compact .chip.overdue { outline: 2px dashed var(--lc); outline-offset: 1px; border: 0; }
+  .compact .chip .ct { display: none; }
+  .compact .chip.overdue { outline: 2px dashed var(--lc); outline-offset: 2px; }
   .axis { position: relative; height: 16px; }
   .axis::before {
-    content: ""; position: absolute; left: -3px; right: -3px; top: 7px;
-    height: 2px; background: var(--line);
+    content: ""; position: absolute; left: -3px; right: -3px; top: 6px; height: 4px;
+    border-radius: 2px; background: color-mix(in srgb, var(--line) 80%, var(--muted));
+    box-shadow: inset 0 1px 1px var(--inset);
   }
   .axis::after {
     content: ""; position: absolute; left: 50%; top: 4px; width: 8px; height: 8px;
-    margin-left: -4px; border-radius: 50%; background: var(--line);
+    margin-left: -4px; border-radius: 50%; background: var(--muted);
   }
   .day.has .axis::after { background: var(--accent); }
   .day.today .axis::after {
-    width: 14px; height: 14px; top: 1px; margin-left: -7px;
-    background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+    width: 14px; height: 14px; top: 1px; margin-left: -7px; background: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
   }
-  .dlabel { text-align: center; font-size: 0.78rem; padding-top: 6px; min-height: 2.6em; color: var(--ink); }
+  .dlabel { text-align: center; font-size: 0.78rem; padding-top: 6px; min-height: 2.6em; }
   .dlabel .wd { display: block; color: var(--muted); text-transform: capitalize; }
   .day.today .dlabel { font-weight: 700; color: var(--accent); }
 
   /* Ny opgave */
   .new { display: grid; grid-template-columns: 1fr; gap: 10px; }
   @media (min-width: 720px) { .new { grid-template-columns: 2fr 1fr 1fr auto; } }
-  input[type="text"], input[type="date"], select {
+  input[type="text"], input[type="date"], select, textarea {
     font: inherit; color: var(--ink); background: var(--surface);
     border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%;
   }
+  textarea { resize: vertical; }
 
   /* Kategorier */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
@@ -129,7 +168,7 @@
   }
   .box h3 { margin: 0 0 6px; font-size: 1rem; color: var(--lc); }
   ul { list-style: none; margin: 0; padding: 0; }
-  li { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  li { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: flex-start; }
   li:first-child { border-top: 0; }
   li.sub { margin-left: 26px; }
   .tick {
@@ -138,10 +177,31 @@
   }
   li.done .tick { background: var(--lc); }
   li.done .title { color: var(--muted); text-decoration: line-through; }
+  li .body { flex: 1; min-width: 0; }
   .title { font-weight: 500; word-break: break-word; }
-  .meta { font-size: 0.82rem; color: var(--muted); }
+  .meta { font-size: 0.82rem; color: var(--muted); word-break: break-word; }
   .meta.late { color: var(--navy); font-weight: 600; }
+  .edit {
+    flex: none; background: transparent; color: var(--lc);
+    border: 1px solid color-mix(in srgb, var(--lc) 45%, transparent);
+    padding: 2px 8px; border-radius: 6px; font-size: 0.9rem; line-height: 1.4;
+  }
+  .edit:hover { background: color-mix(in srgb, var(--lc) 14%, transparent); }
   .toggle { font-size: 0.85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+
+  /* Redigér-dialog */
+  dialog {
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px;
+    width: min(440px, calc(100vw - 32px));
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  }
+  dialog::backdrop { background: rgba(6, 24, 32, 0.55); }
+  dialog form { display: grid; gap: 12px; }
+  dialog label { display: grid; gap: 4px; font-size: 0.875rem; color: var(--muted); }
+  dialog label.check { display: flex; gap: 8px; align-items: center; color: var(--ink); }
+  .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+  .err { color: var(--navy); font-size: 0.875rem; margin: 0; }
 </style>
 </head>
 <body>
@@ -161,20 +221,20 @@
 
   <div id="login" class="card notice" hidden>
     <h2>Log ind for at se dine opgaver</h2>
-    <p>Siden henter dine lister fra Google Tasks og kan oprette nye opgaver.</p>
+    <p>Siden henter dine lister fra Google Tasks og kan oprette og redigere opgaver.</p>
     <button id="signin">Log ind med Google</button>
   </div>
 
   <div id="error" class="card notice error" hidden></div>
 
   <div id="app" hidden>
-    <section class="card">
+    <section class="card raised">
       <div class="card-head">
         <h2>Tidslinje</h2>
         <span class="caption" id="tlcaption"></span>
       </div>
       <div id="timeline"></div>
-      <div class="caption" id="legend" hidden style="margin-top:8px">Stiplet kant betyder, at deadline er overskredet.</div>
+      <div class="caption" id="legend" hidden style="margin-top:10px">Stiplet kant betyder, at deadline er overskredet. Klik på en opgave for at redigere den.</div>
     </section>
 
     <section class="card">
@@ -195,11 +255,26 @@
   </div>
 </main>
 
+<dialog id="editDlg">
+  <form id="editForm">
+    <h2>Rediger opgave</h2>
+    <label>Titel <input type="text" id="eTitle" required></label>
+    <label>Deadline <input type="date" id="eDue"></label>
+    <label>Noter <textarea id="eNotes" rows="3"></textarea></label>
+    <label class="check"><input type="checkbox" id="eDone"> Markér som færdig</label>
+    <p class="err" id="eErr" hidden></p>
+    <div class="actions">
+      <button type="button" class="ghost" id="eCancel">Annuller</button>
+      <button type="submit" id="eSave">Gem</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
-  // Indsæt dit klient-id fra Google Cloud Console her:
- const CLIENT_ID = "737561708169-rsn7gf2iknvp8osmd0bjkfok591eg2db.apps.googleusercontent.com";
-  
+  // Dit Google OAuth klient-id fra Google Cloud Console:
+  const CLIENT_ID = "737561708169-rsn7gf2iknvp8osmd0bjkfok591eg2db.apps.googleusercontent.com";
+
   const SCOPE = "https://www.googleapis.com/auth/tasks";
   const API = "https://tasks.googleapis.com/tasks/v1";
   const TOKEN_KEY = "gt_token_v2";
@@ -212,6 +287,7 @@
 
   let tokenClient = null;
   let loading = false;
+  let editing = null;
   let state = { data: [], defaultId: null };
 
   function el(tag, cls, text) {
@@ -222,12 +298,7 @@
   }
 
   function setStatus(t) { $("status").textContent = t; }
-
-  function showError(msg) {
-    const e = $("error");
-    e.textContent = msg;
-    e.hidden = false;
-  }
+  function showError(msg) { const e = $("error"); e.textContent = msg; e.hidden = false; }
 
   function friendly(e) {
     if (e.message === "FORBIDDEN") {
@@ -336,7 +407,7 @@
       });
     });
 
-    $("legend").hidden = !items.some((i) => i.overdue);
+    $("legend").hidden = !items.length;
 
     if (!items.length) {
       $("tlcaption").textContent = "";
@@ -362,9 +433,13 @@
 
       const stack = el("div", "stack");
       here.forEach((x) => {
-        const c = el("div", "chip" + (x.overdue ? " overdue" : ""), x.t.title || "(uden titel)");
+        const c = el("button", "chip" + (x.overdue ? " overdue" : ""));
+        c.type = "button";
+        c.appendChild(el("span", "ct", x.t.title || "(uden titel)"));
         c.style.setProperty("--lc", "var(--c" + (x.li % 6) + ")");
+        c.style.setProperty("--lf", "var(--f" + (x.li % 6) + ")");
         c.title = (x.overdue ? "Forfalden: " : "") + (x.t.title || "") + " – " + x.list.title + " – " + fmtLong.format(new Date(x.t.due));
+        c.addEventListener("click", () => openEdit(x.list.id, x.t));
         stack.appendChild(c);
       });
       col.appendChild(stack);
@@ -420,7 +495,7 @@
       const add = (t, sub) => {
         const row = el("li", (sub ? "sub " : "") + (t.status === "completed" ? "done" : ""));
         row.appendChild(el("span", "tick"));
-        const body = el("div");
+        const body = el("div", "body");
         body.appendChild(el("div", "title", t.title || "(uden titel)"));
         if (t.due) {
           const late = t.status !== "completed" && dueUTC(t) < t0;
@@ -428,6 +503,13 @@
         }
         if (t.notes) body.appendChild(el("div", "meta", t.notes));
         row.appendChild(body);
+
+        const eb = el("button", "edit", "✎");
+        eb.type = "button";
+        eb.title = "Rediger opgave";
+        eb.setAttribute("aria-label", "Rediger opgave: " + (t.title || ""));
+        eb.addEventListener("click", () => openEdit(list.id, t));
+        row.appendChild(eb);
         ul.appendChild(row);
       };
       top.forEach((t) => { add(t, false); kids(t.id).forEach((c) => add(c, true)); });
@@ -438,6 +520,48 @@
 
     if (!root.children.length) {
       root.appendChild(el("div", "card caption", "Ingen opgaver at vise."));
+    }
+  }
+
+  function openEdit(listId, task) {
+    editing = { listId, id: task.id };
+    $("eTitle").value = task.title || "";
+    $("eDue").value = task.due ? task.due.slice(0, 10) : "";
+    $("eNotes").value = task.notes || "";
+    $("eDone").checked = task.status === "completed";
+    $("eErr").hidden = true;
+    $("editDlg").showModal();
+    $("eTitle").focus();
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    if (!editing) return;
+    const token = getStoredToken();
+    if (!token) { $("editDlg").close(); showLogin(); return; }
+    const title = $("eTitle").value.trim();
+    if (!title) return;
+    const done = $("eDone").checked;
+    const body = {
+      title,
+      notes: $("eNotes").value.trim() || null,
+      due: $("eDue").value ? $("eDue").value + "T00:00:00.000Z" : null,
+      status: done ? "completed" : "needsAction"
+    };
+    if (!done) body.completed = null;
+    const btn = $("eSave");
+    btn.disabled = true;
+    $("eErr").hidden = true;
+    try {
+      await api("/lists/" + encodeURIComponent(editing.listId) + "/tasks/" + encodeURIComponent(editing.id), token, { method: "PATCH", body });
+      $("editDlg").close();
+      editing = null;
+      await load(token);
+    } catch (err) {
+      if (err.message === "AUTH") { $("editDlg").close(); showLogin(); }
+      else { $("eErr").textContent = friendly(err); $("eErr").hidden = false; }
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -497,6 +621,8 @@
     $("refresh").addEventListener("click", refresh);
     $("newForm").addEventListener("submit", createTask);
     $("showDone").addEventListener("change", renderCategories);
+    $("editForm").addEventListener("submit", saveEdit);
+    $("eCancel").addEventListener("click", () => $("editDlg").close());
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 
     refresh();
