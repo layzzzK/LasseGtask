@@ -97,7 +97,7 @@
     background: color-mix(in srgb, var(--bg) 75%, var(--surface));
     box-shadow: inset 0 3px 8px var(--inset), inset 0 -1px 0 var(--hi);
   }
-  .tl-track { display: grid; min-width: min-content; }
+  .tl-track { display: grid; min-width: min-content; position: relative; }
   .day { display: flex; flex-direction: column; min-width: 0; padding: 0 3px; }
   .day.weekend { background: color-mix(in srgb, var(--accent) 6%, transparent); }
   .stack {
@@ -121,16 +121,16 @@
   .chip:hover { transform: translateY(-2px); }
   .chip:active { transform: translateY(1px); }
   .chip .ct {
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
     overflow: hidden; word-break: break-word;
   }
   .chip.overdue { border-style: dashed; border-left-style: solid; }
-  .compact .chip {
-    width: 13px; height: 13px; padding: 0; border-radius: 50%; align-self: center;
-    border: 2px solid var(--lc); background: var(--lf);
+  .day.has .stack { padding-bottom: 0; }
+  .day.has .stack::after {
+    content: ""; align-self: center; flex: none; width: 2px; height: 12px;
+    border-radius: 1px; background: var(--accent); opacity: 0.65;
   }
-  .compact .chip .ct { display: none; }
-  .compact .chip.overdue { outline: 2px dashed var(--lc); outline-offset: 2px; }
+  .day.focus { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 6px; }
   .axis { position: relative; height: 16px; }
   .axis::before {
     content: ""; position: absolute; left: -3px; right: -3px; top: 6px; height: 4px;
@@ -149,6 +149,34 @@
   .dlabel { text-align: center; font-size: 0.78rem; padding-top: 6px; min-height: 2.6em; }
   .dlabel .wd { display: block; color: var(--muted); text-transform: capitalize; }
   .day.today .dlabel { font-weight: 700; color: var(--accent); }
+
+  .day.empty .dlabel { font-size: 0.72rem; color: var(--muted); }
+  .dlabel .wd { min-height: 1.2em; }
+  .tl-nav { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
+  .nav {
+    width: 36px; height: 28px; padding: 0; font-size: 1rem; line-height: 1;
+    background: var(--surface); color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    box-shadow: 0 2px 0 var(--edge2);
+  }
+  .nav:hover { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  .nav:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--edge2); }
+
+  /* Ny opgave (foldud) */
+  details.card.add { padding: 0; width: fit-content; max-width: 100%; }
+  details.card.add[open] { width: 100%; }
+  details.add summary {
+    cursor: pointer; list-style: none; padding: 8px 16px; font-weight: 600;
+    color: var(--accent); display: flex; align-items: center; gap: 8px;
+  }
+  details.add summary::-webkit-details-marker { display: none; }
+  details.add summary::before {
+    content: "+"; width: 20px; height: 20px; display: inline-grid; place-items: center;
+    border-radius: 50%; border: 1px solid currentColor; font-size: 1.1rem; line-height: 1;
+  }
+  details.add[open] summary::before { content: "–"; }
+  details.add summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+  details.add .new { padding: 4px 16px 16px; }
 
   /* Ny opgave */
   .new { display: grid; grid-template-columns: 1fr; gap: 10px; }
@@ -234,18 +262,21 @@
         <span class="caption" id="tlcaption"></span>
       </div>
       <div id="timeline"></div>
-      <div class="caption" id="legend" hidden style="margin-top:10px">Stiplet kant betyder, at deadline er overskredet. Klik på en opgave for at redigere den.</div>
+      <div class="tl-nav" id="tlnav" hidden>
+        <button type="button" class="nav" id="tlPrev" aria-label="Forrige opgave" title="Forrige opgave">←</button>
+        <button type="button" class="nav" id="tlNext" aria-label="Næste opgave" title="Næste opgave">→</button>
+      </div>
     </section>
 
-    <section class="card">
-      <div class="card-head"><h2>Ny opgave</h2></div>
+    <details class="card add" id="addBox">
+      <summary>Tilføj opgave</summary>
       <form class="new" id="newForm">
         <input type="text" id="newTitle" placeholder="Hvad skal laves?" aria-label="Titel" required>
         <input type="date" id="newDue" aria-label="Deadline (valgfri)">
         <select id="newList" aria-label="Kategori"></select>
         <button type="submit" id="newBtn">Tilføj</button>
       </form>
-    </section>
+    </details>
 
     <div class="card-head" style="margin: 8px 4px 12px">
       <h2>Kategorier</h2>
@@ -284,10 +315,12 @@
   const fmtLong = new Intl.DateTimeFormat("da-DK", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   const fmtShort = new Intl.DateTimeFormat("da-DK", { day: "numeric", month: "short", timeZone: "UTC" });
   const fmtWd = new Intl.DateTimeFormat("da-DK", { weekday: "short", timeZone: "UTC" });
+  const fmtMonth = new Intl.DateTimeFormat("da-DK", { month: "short", timeZone: "UTC" });
 
   let tokenClient = null;
   let loading = false;
   let editing = null;
+  let tlScroll = null, tlCols = [], pending = null, pendingTimer = null;
   let state = { data: [], defaultId: null };
 
   function el(tag, cls, text) {
@@ -397,6 +430,8 @@
   function renderTimeline() {
     const root = $("timeline");
     root.textContent = "";
+    tlScroll = null;
+    tlCols = [];
     const t0 = todayUTC();
     const items = [];
     state.data.forEach(({ list, tasks }, li) => {
@@ -407,7 +442,7 @@
       });
     });
 
-    $("legend").hidden = !items.length;
+    $("tlnav").hidden = !items.length;
 
     if (!items.length) {
       $("tlcaption").textContent = "";
@@ -417,19 +452,19 @@
 
     const last = Math.max(13, ...items.map((i) => i.day));
     const days = last + 1;
-    const dayW = days <= 31 ? 96 : days <= 92 ? 64 : 44;
-    const compact = dayW < 80;
     $("tlcaption").textContent = "I dag til " + fmtLong.format(new Date(t0 + last * DAY));
 
     const scroll = el("div", "tl-scroll");
-    const track = el("div", "tl-track" + (compact ? " compact" : ""));
-    track.style.gridTemplateColumns = "repeat(" + days + ", " + dayW + "px)";
+    const track = el("div", "tl-track");
+    const widths = [];
 
     for (let i = 0; i < days; i++) {
       const date = new Date(t0 + i * DAY);
       const dow = date.getUTCDay();
       const here = items.filter((x) => x.day === i);
-      const col = el("div", "day" + (i === 0 ? " today" : "") + (dow === 0 || dow === 6 ? " weekend" : "") + (here.length ? " has" : ""));
+      const has = here.length > 0;
+      widths.push(has ? 112 : i === 0 ? 64 : 40);
+      const col = el("div", "day" + (i === 0 ? " today" : "") + (dow === 0 || dow === 6 ? " weekend" : "") + (has ? " has" : " empty"));
 
       const stack = el("div", "stack");
       here.forEach((x) => {
@@ -446,16 +481,41 @@
       col.appendChild(el("div", "axis"));
 
       const lab = el("div", "dlabel");
-      const showLabel = !compact || i % 7 === 0 || date.getUTCDate() === 1;
-      if (showLabel) {
-        if (!compact) lab.appendChild(el("span", "wd", i === 0 ? "I dag" : fmtWd.format(date)));
+      if (has || i === 0) {
+        lab.appendChild(el("span", "wd", i === 0 ? "I dag" : fmtWd.format(date)));
         lab.appendChild(document.createTextNode(fmtShort.format(date)));
+      } else {
+        lab.appendChild(el("span", "wd", date.getUTCDate() === 1 ? fmtMonth.format(date) : "\u00a0"));
+        lab.appendChild(document.createTextNode(String(date.getUTCDate())));
       }
       col.appendChild(lab);
       track.appendChild(col);
+      if (has) tlCols.push(col);
     }
+    track.style.gridTemplateColumns = widths.map((w) => w + "px").join(" ");
     scroll.appendChild(track);
     root.appendChild(scroll);
+    tlScroll = scroll;
+  }
+
+  function jump(dir) {
+    if (!tlScroll || !tlCols.length) return;
+    const base = pending !== null ? pending : tlScroll.scrollLeft;
+    let target = null;
+    if (dir > 0) {
+      target = tlCols.find((c) => c.offsetLeft > base + 6);
+    } else {
+      for (let k = tlCols.length - 1; k >= 0; k--) {
+        if (tlCols[k].offsetLeft < base - 6) { target = tlCols[k]; break; }
+      }
+    }
+    if (!target) return;
+    pending = target.offsetLeft;
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(() => { pending = null; }, 600);
+    tlScroll.scrollTo({ left: Math.max(0, target.offsetLeft), behavior: "smooth" });
+    target.classList.add("focus");
+    setTimeout(() => target.classList.remove("focus"), 1300);
   }
 
   function renderSelect() {
@@ -583,6 +643,7 @@
       $("newTitle").value = "";
       $("newDue").value = "";
       $("newList").value = state.defaultId;
+      $("addBox").open = false;
       await load(token);
     } catch (err) {
       if (err.message === "AUTH") showLogin();
@@ -621,6 +682,8 @@
     $("refresh").addEventListener("click", refresh);
     $("newForm").addEventListener("submit", createTask);
     $("showDone").addEventListener("change", renderCategories);
+    $("tlPrev").addEventListener("click", () => jump(-1));
+    $("tlNext").addEventListener("click", () => jump(1));
     $("editForm").addEventListener("submit", saveEdit);
     $("eCancel").addEventListener("click", () => $("editDlg").close());
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
