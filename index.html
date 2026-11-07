@@ -200,10 +200,15 @@
   li:first-child { border-top: 0; }
   li.sub { margin-left: 26px; }
   .tick {
-    flex: none; width: 16px; height: 16px; margin-top: 4px;
-    border: 2px solid var(--lc); border-radius: 4px;
+    flex: none; width: 20px; height: 20px; margin-top: 2px; padding: 0; position: relative;
+    border: 2px solid var(--lc); border-radius: 5px; background: transparent; cursor: pointer;
   }
-  li.done .tick { background: var(--lc); }
+  .tick:hover { background: color-mix(in srgb, var(--lc) 18%, transparent); }
+  li.done .tick, li.done .tick:hover { background: var(--lc); }
+  li.done .tick::after {
+    content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px;
+    border: solid var(--surface); border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
   li.done .title { color: var(--muted); text-decoration: line-through; }
   li .body { flex: 1; min-width: 0; }
   .title { font-weight: 500; word-break: break-word; }
@@ -554,7 +559,13 @@
 
       const add = (t, sub) => {
         const row = el("li", (sub ? "sub " : "") + (t.status === "completed" ? "done" : ""));
-        row.appendChild(el("span", "tick"));
+        const tk = el("button", "tick");
+        tk.type = "button";
+        tk.title = t.status === "completed" ? "Markér som ikke færdig" : "Markér som færdig";
+        tk.setAttribute("aria-label", tk.title + ": " + (t.title || ""));
+        tk.setAttribute("aria-pressed", t.status === "completed" ? "true" : "false");
+        tk.addEventListener("click", () => toggleDone(list.id, t));
+        row.appendChild(tk);
         const body = el("div", "body");
         body.appendChild(el("div", "title", t.title || "(uden titel)"));
         if (t.due) {
@@ -580,6 +591,26 @@
 
     if (!root.children.length) {
       root.appendChild(el("div", "card caption", "Ingen opgaver at vise."));
+    }
+  }
+
+  async function toggleDone(listId, t) {
+    const token = getStoredToken();
+    if (!token) { showLogin(); return; }
+    const prev = t.status;
+    const done = prev !== "completed";
+    const body = { status: done ? "completed" : "needsAction" };
+    if (!done) body.completed = null;
+    t.status = body.status;
+    render();
+    try {
+      await api("/lists/" + encodeURIComponent(listId) + "/tasks/" + encodeURIComponent(t.id), token, { method: "PATCH", body });
+      await load(token);
+    } catch (err) {
+      t.status = prev;
+      render();
+      if (err.message === "AUTH") showLogin();
+      else showError(friendly(err));
     }
   }
 
