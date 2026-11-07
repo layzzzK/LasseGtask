@@ -252,14 +252,18 @@
   .sbtn:hover { filter: brightness(0.96); }
   .sbtn.on { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink); transform: scale(1.06); }
   .hnote { margin-top: 10px; resize: vertical; min-height: 56px; }
-  .avgbar { display: flex; gap: 6px; padding: 4px 0; }
+  .avgbar { display: grid; gap: 10px; padding: 2px 0; }
+  .alabel { font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+  .abrow { display: flex; gap: 6px; }
   .abox {
-    flex: 1; min-height: 46px; padding: 8px 12px; border-radius: 8px;
-    display: flex; justify-content: space-between; align-items: center; gap: 8px;
-    font-weight: 600; background: color-mix(in srgb, var(--line) 70%, transparent); color: var(--muted);
+    flex: 1; min-width: 0; min-height: 34px; padding: 4px 10px; border-radius: 8px;
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    font-weight: 600; font-size: 0.9rem;
+    background: color-mix(in srgb, var(--line) 70%, transparent); color: var(--muted);
   }
-  .abox .sub { display: block; font-size: 0.75rem; font-weight: 500; opacity: 0.85; }
-  .abox .av { font-weight: 700; font-size: 1.1rem; }
+  .abox .sub { font-size: 0.7rem; font-weight: 500; opacity: 0.85; margin-left: 4px; }
+  .abox .av { font-weight: 700; font-size: 1rem; }
+  @media (max-width: 480px) { .abox .sub { display: none; } }
   .abox.s1 { background: var(--s1); color: #ffffff; }
   .abox.s2 { background: var(--s2); color: #3a0d0d; }
   .abox.s3 { background: var(--s3); color: #3b3200; }
@@ -374,7 +378,7 @@
         <h2>Gennemsnit</h2>
         <span class="caption" id="hAvgText"></span>
       </div>
-      <div class="avgbar" id="hAvg" role="img" aria-label="Gennemsnit for dagen"></div>
+      <div class="avgbar" id="hAvg" role="group" aria-label="Gennemsnit"></div>
     </section>
 
     <section class="card">
@@ -595,36 +599,58 @@
   }
 
   function renderAvg() {
-    const stats = {};
-    HABIT_CATS.forEach((c) => { stats[c.k] = { sum: 0, n: 0 }; });
-    Object.values(habit.months).forEach((mo) => {
-      Object.values(mo.days).forEach((r) => {
-        HABIT_CATS.forEach((c) => {
-          if (r[c.k]) { stats[c.k].sum += r[c.k]; stats[c.k].n++; }
-        });
-      });
-    });
+    const toKey = (d) => d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate());
+    const today = todayKey();
+    const td = keyDate(today);
+    const wd = (td.getUTCDay() + 6) % 7;
+    const wStart = new Date(td.getTime() - wd * 86400000);
+    const wEnd = new Date(wStart.getTime() + 6 * 86400000);
+    const wsKey = toKey(wStart), weKey = toKey(wEnd);
+    const monthPrefix = today.slice(0, 7);
+    const scopes = [
+      { label: "Alle registreringer", test: () => true },
+      { label: "Denne uge · " + fmtShort.format(wStart) + " – " + fmtShort.format(wEnd), test: (k) => k >= wsKey && k <= weKey },
+      { label: "Denne måned · " + fmtMonthYear.format(td), test: (k) => k.startsWith(monthPrefix) }
+    ];
     const fmt = (n) => n.toLocaleString("da-DK", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
     const bar = $("hAvg");
     bar.textContent = "";
-    const parts = [];
-    let any = false;
-    HABIT_CATS.forEach((c) => {
-      const st = stats[c.k];
-      const avg = st.n ? st.sum / st.n : null;
-      if (avg !== null) any = true;
-      const cls = avg === null ? "" : " s" + Math.min(5, Math.max(1, Math.round(avg)));
-      const box = el("span", "abox" + cls);
-      const left = el("span");
-      left.appendChild(el("span", null, c.label));
-      left.appendChild(el("span", "sub", st.n ? st.n + (st.n === 1 ? " dag" : " dage") : "ingen endnu"));
-      box.appendChild(left);
-      box.appendChild(el("span", "av", avg === null ? "–" : fmt(avg)));
-      bar.appendChild(box);
-      parts.push(c.label + " " + (avg === null ? "ingen registreringer" : fmt(avg) + " af 5 over " + st.n + " dage"));
+    $("hAvgText").textContent = "";
+
+    scopes.forEach((sc) => {
+      const stats = {};
+      HABIT_CATS.forEach((c) => { stats[c.k] = { sum: 0, n: 0 }; });
+      Object.keys(habit.months).forEach((mk) => {
+        const days = habit.months[mk].days;
+        Object.keys(days).forEach((dk) => {
+          if (!sc.test(mk + "-" + dk)) return;
+          HABIT_CATS.forEach((c) => {
+            const v = days[dk][c.k];
+            if (v) { stats[c.k].sum += v; stats[c.k].n++; }
+          });
+        });
+      });
+
+      const wrap = el("div");
+      wrap.appendChild(el("div", "alabel", sc.label));
+      const row = el("div", "abrow");
+      HABIT_CATS.forEach((c) => {
+        const st = stats[c.k];
+        const avg = st.n ? st.sum / st.n : null;
+        const cls = avg === null ? "" : " s" + Math.min(5, Math.max(1, Math.round(avg)));
+        const box = el("span", "abox" + cls);
+        const left = el("span");
+        left.appendChild(document.createTextNode(c.label));
+        left.appendChild(el("span", "sub", st.n ? st.n + (st.n === 1 ? " dag" : " dage") : "ingen"));
+        box.appendChild(left);
+        box.appendChild(el("span", "av", avg === null ? "–" : fmt(avg)));
+        box.title = sc.label + " – " + c.label + ": " + (avg === null ? "ingen registreringer" : fmt(avg) + " af 5 over " + st.n + (st.n === 1 ? " dag" : " dage"));
+        row.appendChild(box);
+      });
+      wrap.appendChild(row);
+      bar.appendChild(wrap);
     });
-    $("hAvgText").textContent = any ? "Gennemsnit af alle registreringer" : "Ingen registreringer endnu";
-    bar.setAttribute("aria-label", "Gennemsnit af alle registreringer: " + parts.join(", "));
   }
 
   function renderHabitForm() {
