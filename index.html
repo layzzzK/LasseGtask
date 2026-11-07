@@ -222,6 +222,56 @@
   .edit:hover { background: color-mix(in srgb, var(--lc) 14%, transparent); }
   .toggle { font-size: 0.85rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 
+  /* Faner */
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    background: transparent; color: var(--muted); border: 0;
+    border-bottom: 3px solid transparent; border-radius: 0;
+    padding: 6px 14px; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+
+  /* Habittracker */
+  :root { --s1: #d32f2f; --s2: #f2a2a2; --s3: #f6d84a; --s4: #a8dc8e; --s5: #2b8a3e; }
+  .hdate { width: auto; }
+  .hrow { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .hrow:first-child { border-top: 0; }
+  .hlabel { width: 84px; font-weight: 600; }
+  .scale { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sbtn {
+    width: 46px; height: 40px; padding: 0; font-weight: 700; font-size: 1rem;
+    border: 2px solid transparent; border-radius: 8px; transition: transform 0.1s ease;
+  }
+  .sbtn.s1 { background: var(--s1); color: #ffffff; }
+  .sbtn.s2 { background: var(--s2); color: #3a0d0d; }
+  .sbtn.s3 { background: var(--s3); color: #3b3200; }
+  .sbtn.s4 { background: var(--s4); color: #12301a; }
+  .sbtn.s5 { background: var(--s5); color: #ffffff; }
+  .sbtn.dim { opacity: 0.4; }
+  .sbtn:hover { filter: brightness(0.96); }
+  .sbtn.on { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink); transform: scale(1.06); }
+  .cal-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 12px; }
+  .cal-head h2 { min-width: 11ch; text-align: center; text-transform: capitalize; font-size: 1.05rem; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cwd { text-align: center; font-size: 0.78rem; color: var(--muted); }
+  .cday {
+    padding: 0; background: #ffffff; color: #14202b; text-align: left;
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+    display: flex; flex-direction: column; min-height: 58px;
+  }
+  .cday:hover { border-color: var(--accent); }
+  .cday .dn { font-size: 0.78rem; font-weight: 600; padding: 3px 6px; }
+  .cday .bands { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 4px; flex: 1; justify-content: flex-end; }
+  .band { height: 9px; border-radius: 2px; background: transparent; }
+  .band.s1 { background: var(--s1); }
+  .band.s2 { background: var(--s2); }
+  .band.s3 { background: var(--s3); }
+  .band.s4 { background: var(--s4); }
+  .band.s5 { background: var(--s5); }
+  .cday.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .cday.sel { outline: 3px solid var(--accent); outline-offset: 1px; }
+
   /* Redigér-dialog */
   dialog {
     background: var(--surface); color: var(--ink);
@@ -240,7 +290,10 @@
 <body>
 <main>
   <header>
-    <h1>Mine opgaver</h1>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab" id="tabTasks" role="tab" aria-selected="true">Mine opgaver</button>
+      <button type="button" class="tab" id="tabHabits" role="tab" aria-selected="false">Habittracker</button>
+    </div>
     <div class="bar">
       <span class="status" id="status"></span>
       <button class="ghost" id="refresh" hidden>Opdater</button>
@@ -261,6 +314,7 @@
   <div id="error" class="card notice error" hidden></div>
 
   <div id="app" hidden>
+   <div id="tasksView">
     <section class="card raised">
       <div class="card-head">
         <h2>Tidslinje</h2>
@@ -288,6 +342,28 @@
       <label class="toggle"><input type="checkbox" id="showDone"> Vis færdige</label>
     </div>
     <div class="grid" id="categories"></div>
+   </div>
+
+   <div id="habitView" hidden>
+    <section class="card">
+      <div class="card-head">
+        <h2 id="hSelLabel"></h2>
+        <input type="date" id="hDate" class="hdate" aria-label="Vælg dag">
+      </div>
+      <div id="hRows"></div>
+      <p class="caption" style="margin: 10px 0 0">1 er dårligst og 5 er bedst. Tryk på det valgte tal igen for at fjerne det.</p>
+    </section>
+
+    <section class="card">
+      <div class="cal-head">
+        <button type="button" class="nav" id="hPrev" aria-label="Forrige måned" title="Forrige måned">←</button>
+        <h2 id="hMonth"></h2>
+        <button type="button" class="nav" id="hNext" aria-label="Næste måned" title="Næste måned">→</button>
+      </div>
+      <div class="cal" id="hCal"></div>
+      <p class="caption" style="margin: 12px 0 0">Striberne viser Mad, Træning og Humør (oppefra og ned). Tryk på en dag for at se eller ændre den.</p>
+    </section>
+   </div>
   </div>
 </main>
 
@@ -327,6 +403,17 @@
   let editing = null;
   let tlScroll = null, tlCols = [], pending = null, pendingTimer = null;
   let state = { data: [], defaultId: null };
+
+  const HABIT_TITLE = "Habittracker-data (må ikke slettes)";
+  const HABIT_CATS = [
+    { k: "mad", label: "Mad" },
+    { k: "traening", label: "Træning" },
+    { k: "humor", label: "Humør" }
+  ];
+  const SCALE_NAMES = ["Dårligst", "Lidt dårligt", "Middel", "Lidt godt", "Bedst"];
+  const fmtDayLong = new Intl.DateTimeFormat("da-DK", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+  const fmtMonthYear = new Intl.DateTimeFormat("da-DK", { month: "long", year: "numeric", timeZone: "UTC" });
+  const habit = { listId: null, months: {}, sel: todayKey(), view: { y: new Date().getFullYear(), m: new Date().getMonth() }, busy: 0, queue: Promise.resolve() };
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -400,11 +487,19 @@
         api("/users/@me/lists/@default", token)
       ]);
       state.defaultId = def.id;
-      lists.sort((a, b) => (a.id === def.id ? -1 : b.id === def.id ? 1 : 0));
-      state.data = await Promise.all(lists.map(async (l) => ({
+      const habitList = lists.find((l) => l.title === HABIT_TITLE) || null;
+      const normal = lists.filter((l) => l !== habitList);
+      normal.sort((a, b) => (a.id === def.id ? -1 : b.id === def.id ? 1 : 0));
+      state.data = await Promise.all(normal.map(async (l) => ({
         list: l,
         tasks: await fetchAll("/lists/" + encodeURIComponent(l.id) + "/tasks?maxResults=100&showCompleted=true&showHidden=false", token)
       })));
+      if (!habit.busy) {
+        habit.listId = habitList ? habitList.id : null;
+        habit.months = habitList
+          ? parseHabit(await fetchAll("/lists/" + encodeURIComponent(habitList.id) + "/tasks?maxResults=100&showCompleted=true&showHidden=true", token))
+          : {};
+      }
       $("app").hidden = false;
       render();
       $("refresh").hidden = false;
@@ -430,6 +525,163 @@
     renderTimeline();
     renderSelect();
     renderCategories();
+    renderHabit();
+  }
+
+  /* ---------- Faner ---------- */
+  function setTab(name) {
+    const habitTab = name === "habits";
+    $("tasksView").hidden = habitTab;
+    $("habitView").hidden = !habitTab;
+    $("tabTasks").setAttribute("aria-selected", String(!habitTab));
+    $("tabHabits").setAttribute("aria-selected", String(habitTab));
+    try { history.replaceState(null, "", habitTab ? "#habits" : location.pathname + location.search); } catch {}
+  }
+
+  /* ---------- Habittracker ---------- */
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function todayKey() {
+    const n = new Date();
+    return n.getFullYear() + "-" + pad(n.getMonth() + 1) + "-" + pad(n.getDate());
+  }
+  function keyDate(key) {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+
+  function parseHabit(tasks) {
+    const months = {};
+    tasks.forEach((t) => {
+      if (!/^\d{4}-\d{2}$/.test(t.title || "")) return;
+      let days = {};
+      try { days = JSON.parse(t.notes || "{}") || {}; } catch {}
+      months[t.title] = { id: t.id, days };
+    });
+    return months;
+  }
+
+  function dayRec(key) {
+    const m = habit.months[key.slice(0, 7)];
+    return (m && m.days[key.slice(8, 10)]) || null;
+  }
+
+  function renderHabit() {
+    renderHabitForm();
+    renderCalendar();
+  }
+
+  function renderHabitForm() {
+    const key = habit.sel;
+    $("hSelLabel").textContent = fmtDayLong.format(keyDate(key)) + (key === todayKey() ? " (i dag)" : "");
+    $("hDate").value = key;
+    const rec = dayRec(key) || {};
+    const rows = $("hRows");
+    rows.textContent = "";
+    HABIT_CATS.forEach((c) => {
+      const row = el("div", "hrow");
+      row.appendChild(el("div", "hlabel", c.label));
+      const grp = el("div", "scale");
+      grp.setAttribute("role", "group");
+      grp.setAttribute("aria-label", c.label);
+      for (let v = 1; v <= 5; v++) {
+        const b = el("button", "sbtn s" + v, String(v));
+        b.type = "button";
+        const on = rec[c.k] === v;
+        if (on) b.classList.add("on"); else if (rec[c.k]) b.classList.add("dim");
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+        b.title = SCALE_NAMES[v - 1];
+        b.addEventListener("click", () => setScore(c.k, v));
+        grp.appendChild(b);
+      }
+      row.appendChild(grp);
+      rows.appendChild(row);
+    });
+  }
+
+  function renderCalendar() {
+    const { y, m } = habit.view;
+    $("hMonth").textContent = fmtMonthYear.format(new Date(Date.UTC(y, m, 1)));
+    const cal = $("hCal");
+    cal.textContent = "";
+    ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"].forEach((w) => cal.appendChild(el("div", "cwd", w)));
+    const offset = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7;
+    const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    for (let i = 0; i < offset; i++) cal.appendChild(el("div", "cblank"));
+    const today = todayKey();
+    for (let d = 1; d <= dim; d++) {
+      const key = y + "-" + pad(m + 1) + "-" + pad(d);
+      const rec = dayRec(key) || {};
+      const cell = el("button", "cday" + (key === habit.sel ? " sel" : "") + (key === today ? " today" : ""));
+      cell.type = "button";
+      cell.appendChild(el("span", "dn", String(d)));
+      const bands = el("span", "bands");
+      HABIT_CATS.forEach((c) => bands.appendChild(el("span", "band" + (rec[c.k] ? " s" + rec[c.k] : ""))));
+      cell.appendChild(bands);
+      cell.setAttribute("aria-label", fmtDayLong.format(keyDate(key)) + ": " + HABIT_CATS.map((c) => c.label + " " + (rec[c.k] || "ingen")).join(", "));
+      cell.addEventListener("click", () => selectDay(key));
+      cal.appendChild(cell);
+    }
+  }
+
+  function selectDay(key) {
+    habit.sel = key;
+    renderHabit();
+    $("hSelLabel").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  function shiftMonth(delta) {
+    let { y, m } = habit.view;
+    m += delta;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    habit.view = { y, m };
+    renderCalendar();
+  }
+
+  function setScore(cat, v) {
+    const key = habit.sel, mk = key.slice(0, 7), dk = key.slice(8, 10);
+    const month = habit.months[mk] || (habit.months[mk] = { id: null, days: {} });
+    const rec = month.days[dk] || (month.days[dk] = {});
+    rec[cat] = rec[cat] === v ? null : v;
+    if (!HABIT_CATS.some((c) => rec[c.k])) delete month.days[dk];
+    renderHabit();
+    saveMonth(mk);
+  }
+
+  function saveMonth(mk) {
+    habit.busy++;
+    habit.queue = habit.queue
+      .then(() => persistMonth(mk))
+      .catch((err) => {
+        if (err.message === "AUTH") showLogin();
+        else showError("Kunne ikke gemme i Google Tasks: " + friendly(err));
+      })
+      .finally(() => { habit.busy--; });
+  }
+
+  async function persistMonth(mk) {
+    const token = getStoredToken();
+    if (!token) throw new Error("AUTH");
+    const month = habit.months[mk];
+    if (!month) return;
+    const days = {};
+    Object.keys(month.days).forEach((dk) => {
+      const r = month.days[dk], o = {};
+      HABIT_CATS.forEach((c) => { if (r[c.k]) o[c.k] = r[c.k]; });
+      if (Object.keys(o).length) days[dk] = o;
+    });
+    const notes = JSON.stringify(days);
+    if (month.id) {
+      await api("/lists/" + encodeURIComponent(habit.listId) + "/tasks/" + encodeURIComponent(month.id), token, { method: "PATCH", body: { notes } });
+      return;
+    }
+    if (!Object.keys(days).length) return;
+    if (!habit.listId) {
+      const l = await api("/users/@me/lists", token, { method: "POST", body: { title: HABIT_TITLE } });
+      habit.listId = l.id;
+    }
+    const t = await api("/lists/" + encodeURIComponent(habit.listId) + "/tasks", token, { method: "POST", body: { title: mk, notes } });
+    month.id = t.id;
   }
 
   function renderTimeline() {
@@ -713,6 +965,18 @@
     $("refresh").addEventListener("click", refresh);
     $("newForm").addEventListener("submit", createTask);
     $("showDone").addEventListener("change", renderCategories);
+    $("tabTasks").addEventListener("click", () => setTab("tasks"));
+    $("tabHabits").addEventListener("click", () => setTab("habits"));
+    $("hPrev").addEventListener("click", () => shiftMonth(-1));
+    $("hNext").addEventListener("click", () => shiftMonth(1));
+    $("hDate").addEventListener("change", (e) => {
+      if (!e.target.value) return;
+      habit.sel = e.target.value;
+      const [y, m] = habit.sel.split("-").map(Number);
+      habit.view = { y, m: m - 1 };
+      renderHabit();
+    });
+    setTab(location.hash === "#habits" ? "habits" : "tasks");
     $("tlPrev").addEventListener("click", () => jump(-1));
     $("tlNext").addEventListener("click", () => jump(1));
     $("editForm").addEventListener("submit", saveEdit);
