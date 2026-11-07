@@ -251,6 +251,22 @@
   .sbtn.dim { opacity: 0.4; }
   .sbtn:hover { filter: brightness(0.96); }
   .sbtn.on { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink); transform: scale(1.06); }
+  .hnote { margin-top: 10px; resize: vertical; min-height: 56px; }
+  .avgbar { position: relative; padding: 6px 0; }
+  .avgbar .track { display: flex; height: 14px; border-radius: 7px; overflow: hidden; }
+  .avgbar .track span { flex: 1; }
+  .avgbar .track .s1 { background: var(--s1); }
+  .avgbar .track .s2 { background: var(--s2); }
+  .avgbar .track .s3 { background: var(--s3); }
+  .avgbar .track .s4 { background: var(--s4); }
+  .avgbar .track .s5 { background: var(--s5); }
+  .avgbar.none .track { opacity: 0.25; }
+  .avgbar .pin {
+    position: absolute; top: 2px; bottom: 2px; width: 6px; margin-left: -3px;
+    border-radius: 3px; background: var(--ink); box-shadow: 0 0 0 2px var(--surface);
+    transition: left 0.25s ease;
+  }
+  .cdot { color: var(--accent); }
   .cal-head { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 12px; }
   .cal-head h2 { min-width: 11ch; text-align: center; text-transform: capitalize; font-size: 1.05rem; }
   .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
@@ -351,7 +367,18 @@
         <input type="date" id="hDate" class="hdate" aria-label="Vælg dag">
       </div>
       <div id="hRows"></div>
-      <p class="caption" style="margin: 10px 0 0">1 er dårligst og 5 er bedst. Tryk på det valgte tal igen for at fjerne det.</p>
+      <textarea id="hNote" class="hnote" rows="2" maxlength="150" placeholder="Kommentar til dagen" aria-label="Kommentar til dagen"></textarea>
+    </section>
+
+    <section class="card">
+      <div class="card-head" style="margin-bottom: 8px">
+        <h2>Gennemsnit</h2>
+        <span class="caption" id="hAvgText"></span>
+      </div>
+      <div class="avgbar none" id="hAvg" role="img" aria-label="Gennemsnit for dagen">
+        <div class="track"><span class="s1"></span><span class="s2"></span><span class="s3"></span><span class="s4"></span><span class="s5"></span></div>
+        <span class="pin" id="hPin" hidden></span>
+      </div>
     </section>
 
     <section class="card">
@@ -413,7 +440,7 @@
   const SCALE_NAMES = ["Dårligst", "Lidt dårligt", "Middel", "Lidt godt", "Bedst"];
   const fmtDayLong = new Intl.DateTimeFormat("da-DK", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
   const fmtMonthYear = new Intl.DateTimeFormat("da-DK", { month: "long", year: "numeric", timeZone: "UTC" });
-  const habit = { listId: null, months: {}, sel: todayKey(), view: { y: new Date().getFullYear(), m: new Date().getMonth() }, busy: 0, queue: Promise.resolve() };
+  const habit = { listId: null, months: {}, sel: todayKey(), view: { y: new Date().getFullYear(), m: new Date().getMonth() }, busy: 0, noteTimer: null, noteMk: null, queue: Promise.resolve() };
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -494,7 +521,7 @@
         list: l,
         tasks: await fetchAll("/lists/" + encodeURIComponent(l.id) + "/tasks?maxResults=100&showCompleted=true&showHidden=false", token)
       })));
-      if (!habit.busy) {
+      if (!habit.busy && !habit.noteTimer) {
         habit.listId = habitList ? habitList.id : null;
         habit.months = habitList
           ? parseHabit(await fetchAll("/lists/" + encodeURIComponent(habitList.id) + "/tasks?maxResults=100&showCompleted=true&showHidden=true", token))
@@ -567,7 +594,29 @@
 
   function renderHabit() {
     renderHabitForm();
+    renderAvg();
     renderCalendar();
+  }
+
+  function renderAvg() {
+    const rec = dayRec(habit.sel) || {};
+    const vals = HABIT_CATS.map((c) => rec[c.k]).filter(Boolean);
+    const bar = $("hAvg"), pin = $("hPin");
+    if (!vals.length) {
+      bar.classList.add("none");
+      pin.hidden = true;
+      $("hAvgText").textContent = "Ingen registreringer for dagen";
+      bar.setAttribute("aria-label", "Gennemsnit for dagen: ingen registreringer");
+      return;
+    }
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const txt = avg.toLocaleString("da-DK", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " af 5"
+      + (vals.length < HABIT_CATS.length ? " (" + vals.length + " af " + HABIT_CATS.length + " kategorier)" : "");
+    bar.classList.remove("none");
+    pin.hidden = false;
+    pin.style.left = ((avg - 0.5) / 5 * 100) + "%";
+    $("hAvgText").textContent = txt;
+    bar.setAttribute("aria-label", "Gennemsnit for dagen: " + txt);
   }
 
   function renderHabitForm() {
@@ -575,6 +624,7 @@
     $("hSelLabel").textContent = fmtDayLong.format(keyDate(key)) + (key === todayKey() ? " (i dag)" : "");
     $("hDate").value = key;
     const rec = dayRec(key) || {};
+    if ($("hNote").value !== (rec.n || "")) $("hNote").value = rec.n || "";
     const rows = $("hRows");
     rows.textContent = "";
     HABIT_CATS.forEach((c) => {
@@ -613,11 +663,13 @@
       const rec = dayRec(key) || {};
       const cell = el("button", "cday" + (key === habit.sel ? " sel" : "") + (key === today ? " today" : ""));
       cell.type = "button";
-      cell.appendChild(el("span", "dn", String(d)));
+      const dn = el("span", "dn", String(d));
+      if (rec.n) { const dot = el("span", "cdot", " •"); dot.title = "Har en kommentar"; dn.appendChild(dot); }
+      cell.appendChild(dn);
       const bands = el("span", "bands");
       HABIT_CATS.forEach((c) => bands.appendChild(el("span", "band" + (rec[c.k] ? " s" + rec[c.k] : ""))));
       cell.appendChild(bands);
-      cell.setAttribute("aria-label", fmtDayLong.format(keyDate(key)) + ": " + HABIT_CATS.map((c) => c.label + " " + (rec[c.k] || "ingen")).join(", "));
+      cell.setAttribute("aria-label", fmtDayLong.format(keyDate(key)) + ": " + HABIT_CATS.map((c) => c.label + " " + (rec[c.k] || "ingen")).join(", ") + (rec.n ? ", med kommentar" : ""));
       cell.addEventListener("click", () => selectDay(key));
       cal.appendChild(cell);
     }
@@ -643,9 +695,33 @@
     const month = habit.months[mk] || (habit.months[mk] = { id: null, days: {} });
     const rec = month.days[dk] || (month.days[dk] = {});
     rec[cat] = rec[cat] === v ? null : v;
-    if (!HABIT_CATS.some((c) => rec[c.k])) delete month.days[dk];
+    if (!hasData(rec)) delete month.days[dk];
     renderHabit();
     saveMonth(mk);
+  }
+
+  function hasData(rec) {
+    return HABIT_CATS.some((c) => rec[c.k]) || !!(rec.n && rec.n.trim());
+  }
+
+  function setNote(text) {
+    const key = habit.sel, mk = key.slice(0, 7), dk = key.slice(8, 10);
+    if (!text.trim() && !(habit.months[mk] && habit.months[mk].days[dk])) return;
+    const month = habit.months[mk] || (habit.months[mk] = { id: null, days: {} });
+    const rec = month.days[dk] || (month.days[dk] = {});
+    rec.n = text;
+    if (!hasData(rec)) delete month.days[dk];
+    renderCalendar();
+    habit.noteMk = mk;
+    clearTimeout(habit.noteTimer);
+    habit.noteTimer = setTimeout(() => { habit.noteTimer = null; saveMonth(mk); }, 700);
+  }
+
+  function flushNote() {
+    if (!habit.noteTimer) return;
+    clearTimeout(habit.noteTimer);
+    habit.noteTimer = null;
+    saveMonth(habit.noteMk);
   }
 
   function saveMonth(mk) {
@@ -668,6 +744,7 @@
     Object.keys(month.days).forEach((dk) => {
       const r = month.days[dk], o = {};
       HABIT_CATS.forEach((c) => { if (r[c.k]) o[c.k] = r[c.k]; });
+      if (r.n && r.n.trim()) o.n = r.n.trim();
       if (Object.keys(o).length) days[dk] = o;
     });
     const notes = JSON.stringify(days);
@@ -976,6 +1053,10 @@
       habit.view = { y, m: m - 1 };
       renderHabit();
     });
+    $("hNote").addEventListener("input", () => setNote($("hNote").value));
+    $("hNote").addEventListener("blur", flushNote);
+    window.addEventListener("pagehide", flushNote);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) flushNote(); });
     setTab(location.hash === "#habits" ? "habits" : "tasks");
     $("tlPrev").addEventListener("click", () => jump(-1));
     $("tlNext").addEventListener("click", () => jump(1));
